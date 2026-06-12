@@ -13,7 +13,13 @@ api.interceptors.request.use((config) => {
   let url = getPublicEnv('NEXT_PUBLIC_BACKEND_URL') || '';
   if (typeof window !== 'undefined' && window.location) {
     const hostname = window.location.hostname;
-    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    const port = window.location.port;
+    
+    // If accessing via the gateway (any port other than direct frontend port 3000)
+    // we can use relative routing to avoid CORS and port-forwarding issues.
+    if (port !== '3000') {
+      url = '/api';
+    } else if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
       // If accessing via ngrok or any domain name, route API requests relatively through the gateway.
       if (hostname.endsWith('.ngrok-free.dev') || !/^[0-9.]+$/.test(hostname)) {
         url = '/api';

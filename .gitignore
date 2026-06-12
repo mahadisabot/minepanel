@@ -2,7 +2,7 @@
 filebrowser-data/*
 data/*
 node_modules/
-package-lock.json
+/package-lock.json
 skills-lock.json
 .agents/
 servers/

@@ -1,0 +1,226 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import * as fs from 'fs-extra';
+import * as path from 'node:path';
+import * as yaml from 'js-yaml';
+import { Settings } from 'src/users/entities/settings.entity';
+
+export interface ProxyMapping {
+  host: string;
+  backend: string;
+}
+
+// mc-router routes config format: { "mappings": { "hostname": "backend:port" } }
+interface ProxyRoutesConfig {
+  'default-server'?: string;
+  mappings: Record<string, string>;
+}
+
+interface ServerProxyInfo {
+  id: string;
+  hostname?: string;
+  useProxy: boolean;
+}
+
+@Injectable()
+export class ProxyService {
+  private readonly logger = new Logger(ProxyService.name);
+  private readonly SERVERS_DIR: string;
+  private readonly PROXY_DIR: string;
+  private readonly ROUTES_FILE: string;
+
+  constructor(
+    private readonly configService: ConfigService,
+    @InjectRepository(Settings)
+    private readonly settingsRepo: Repository<Settings>,
+  ) {
+    this.SERVERS_DIR = this.configService.get('serversDir');
+    // Use /app/data for files written by backend (not BASE_DIR which is for host paths)
+    this.PROXY_DIR = '/app/data/proxy';
+    this.ROUTES_FILE = path.join(this.PROXY_DIR, 'routes.json');
+  }
+
+  async getProxySettings(userId?: number): Promise<{ enabled: boolean; baseDomain: string | null }> {
+    let settings;
+    if (userId) {
+      settings = await this.settingsRepo.findOne({ where: { userId } });
+    } else {
+      const [first] = await this.settingsRepo.find({ order: { id: 'ASC' }, take: 1 });
+      settings = first;
+    }
+    return {
+      enabled: settings?.preferences?.proxyEnabled ?? false,
+      baseDomain: settings?.preferences?.proxyBaseDomain ?? null,
+    };
+  }
+
+  async isProxyAvailable(userId?: number): Promise<boolean> {
+    const { baseDomain } = await this.getProxySettings(userId);
+    return !!baseDomain;
+  }
+
+  async isProxyEnabled(userId?: number): Promise<boolean> {
+    const { enabled, baseDomain } = await this.getProxySettings(userId);
+    return enabled && !!baseDomain;
+  }
+
+  generateHostname(serverId: string, baseDomain: string, customHostname?: string): string {
+    if (customHostname) {
+      // Si el hostname custom ya incluye el dominio base, usarlo tal cual
+      if (customHostname.includes('.')) {
+        return customHostname;
+      }
+      // Si no, agregarlo como subdominio
+      return `${customHostname}.${baseDomain}`;
+    }
+    return `${serverId}.${baseDomain}`;
+  }
+
+  async generateRoutesFile(servers: ServerProxyInfo[], baseDomain: string): Promise<void> {
+    await fs.ensureDir(this.PROXY_DIR);
+
+    const mappings: Record<string, string> = {};
+    servers
+      .filter((s) => s.useProxy)
+      .forEach((server) => {
+        const hostname = this.generateHostname(server.id, baseDomain, server.hostname);
+        mappings[hostname] = `${server.id}:25565`;
+      });
+
+    const config: ProxyRoutesConfig = { mappings };
+
+    await fs.writeJson(this.ROUTES_FILE, config, { spaces: 2 });
+    this.logger.log(`Generated routes.json with ${Object.keys(mappings).length} mappings`);
+  }
+
+  async addServerToProxy(serverId: string, baseDomain: string, customHostname?: string): Promise<void> {
+    const config = await this.loadRoutesConfig();
+    const hostname = this.generateHostname(serverId, baseDomain, customHostname);
+
+    // Remove old mapping for this server if exists (different hostname)
+    for (const [host, backend] of Object.entries(config.mappings)) {
+      if (backend === `${serverId}:25565` && host !== hostname) {
+        delete config.mappings[host];
+      }
+    }
+
+    config.mappings[hostname] = `${serverId}:25565`;
+
+    await this.saveRoutesConfig(config);
+    this.logger.log(`Added/updated server ${serverId} to proxy with hostname ${hostname}`);
+  }
+
+  async removeServerFromProxy(serverId: string): Promise<void> {
+    const config = await this.loadRoutesConfig();
+    const backend = `${serverId}:25565`;
+
+    for (const [host, b] of Object.entries(config.mappings)) {
+      if (b === backend) {
+        delete config.mappings[host];
+      }
+    }
+
+    await this.saveRoutesConfig(config);
+    this.logger.log(`Removed server ${serverId} from proxy`);
+  }
+
+  async clearRoutesFile(): Promise<void> {
+    await this.saveRoutesConfig({ mappings: {} });
+    this.logger.log('Cleared proxy routes.json');
+  }
+
+  async getServerHostname(serverId: string, userId?: number): Promise<string | null> {
+    const config = await this.loadRoutesConfig();
+    const backend = `${serverId}:25565`;
+
+    // Find hostname by backend
+    for (const [host, b] of Object.entries(config.mappings)) {
+      if (b === backend) {
+        return host;
+      }
+    }
+
+    const proxySettings = await this.getProxySettings(userId);
+    if (proxySettings.enabled && proxySettings.baseDomain) {
+      return this.getConfiguredServerHostname(serverId, proxySettings.baseDomain);
+    }
+
+    return null;
+  }
+
+  private async getConfiguredServerHostname(serverId: string, baseDomain: string): Promise<string | null> {
+    try {
+      const dockerComposePath = path.join(this.SERVERS_DIR, serverId, 'docker-compose.yml');
+      if (!(await fs.pathExists(dockerComposePath))) {
+        return this.generateHostname(serverId, baseDomain);
+      }
+
+      const content = await fs.readFile(dockerComposePath, 'utf8');
+      const compose = yaml.load(content) as { services?: { mc?: { labels?: string[] | Record<string, string | boolean> } } };
+      const labels = compose?.services?.mc?.labels;
+      const getLabel = (key: string): string | undefined => {
+        if (Array.isArray(labels)) {
+          return labels.find((label) => label.startsWith(`${key}=`))?.split('=').slice(1).join('=');
+        }
+
+        if (labels && typeof labels === 'object') {
+          const value = labels[key];
+          return value === undefined ? undefined : String(value);
+        }
+
+        return undefined;
+      };
+
+      if (getLabel('minepanel.proxy.enabled') === 'false') {
+        return null;
+      }
+
+      return this.generateHostname(serverId, baseDomain, getLabel('minepanel.proxy.hostname'));
+    } catch (error) {
+      this.logger.warn(`Failed to load configured proxy hostname for ${serverId}`, error);
+      return this.generateHostname(serverId, baseDomain);
+    }
+  }
+
+  async getAllMappings(): Promise<ProxyMapping[]> {
+    const config = await this.loadRoutesConfig();
+    return Object.entries(config.mappings).map(([host, backend]) => ({ host, backend }));
+  }
+
+  private async loadRoutesConfig(): Promise<ProxyRoutesConfig> {
+    try {
+      if (await fs.pathExists(this.ROUTES_FILE)) {
+        const data = await fs.readJson(this.ROUTES_FILE);
+        // Handle migration from old array format
+        if (Array.isArray(data.mappings)) {
+          const mappings: Record<string, string> = {};
+          for (const m of data.mappings) {
+            mappings[m.host] = m.backend;
+          }
+          return { mappings };
+        }
+        return data;
+      }
+    } catch (error) {
+      this.logger.warn('Error loading routes.json, creating new one');
+      this.logger.error(error);
+    }
+    return { mappings: {} };
+  }
+
+  private async saveRoutesConfig(config: ProxyRoutesConfig): Promise<void> {
+    await fs.ensureDir(this.PROXY_DIR);
+    await fs.writeJson(this.ROUTES_FILE, config, { spaces: 2 });
+  }
+
+  async getProxyStatus(): Promise<{ running: boolean; routesCount: number }> {
+    const config = await this.loadRoutesConfig();
+    const routesExist = await fs.pathExists(this.ROUTES_FILE);
+    return {
+      running: routesExist,
+      routesCount: Object.keys(config.mappings).length,
+    };
+  }
+}

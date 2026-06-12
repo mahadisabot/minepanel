@@ -1,0 +1,29 @@
+{
+  "name": "minepanel-docs",
+  "version": "1.10.1",
+  "description": "Minepanel documentation built with VitePress",
+  "type": "module",
+  "scripts": {
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build && node ./scripts/postbuild-sitemap.mjs",
+    "docs:preview": "vitepress preview"
+  },
+  "keywords": [
+    "minepanel",
+    "minecraft",
+    "server",
+    "docker",
+    "documentation"
+  ],
+  "author": "Ketbome",
+  "license": "SEE LICENSE IN LICENSE",
+  "devDependencies": {
+    "mermaid": "11.12.2",
+    "terser": "^5.46.0",
+    "vitepress": "1.6.4",
+    "vitepress-plugin-mermaid": "2.0.17"
+  },
+  "dependencies": {
+    "vue-router": "^5.0.2"
+  }
+}

@@ -1,0 +1,361 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import * as bcrypt from 'bcrypt';
+import { AuthService } from './auth.service';
+import { UsersService } from '../users/services/users.service';
+import { PayloadToken } from './models/token.model';
+import { RefreshToken } from './entities/refresh-token.entity';
+import { PasswordResetToken } from './entities/password-reset-token.entity';
+import { AuthMailService } from './auth-mail.service';
+import { Repository } from 'typeorm';
+import { AuditLogService } from 'src/users/services/audit-log.service';
+
+jest.mock('bcrypt');
+jest.mock('node:crypto', () => ({
+  randomBytes: jest.fn(() => ({ toString: () => 'mock-random-token' })),
+  createHash: jest.fn(() => ({
+    update: jest.fn().mockReturnThis(),
+    digest: jest.fn(() => 'hashed-reset-token'),
+  })),
+}));
+
+describe('AuthService', () => {
+  let service: AuthService;
+  let jwtService: jest.Mocked<JwtService>;
+  let usersService: jest.Mocked<UsersService>;
+  let refreshTokenRepo: jest.Mocked<Repository<RefreshToken>>;
+  let passwordResetTokenRepo: jest.Mocked<Repository<PasswordResetToken>>;
+  let authMailService: jest.Mocked<AuthMailService>;
+  let auditLogService: jest.Mocked<AuditLogService>;
+
+  const mockUser = {
+    id: 1,
+    username: 'testuser',
+    email: 'test@example.com',
+    password: 'hashedPassword123',
+    role: 'USER',
+    isActive: true,
+  };
+
+  beforeEach(async () => {
+    const mockJwtService = {
+      sign: jest.fn(),
+      decode: jest.fn(),
+    };
+
+    const mockUsersService = {
+      getUserByUsernameOrEmail: jest.fn(),
+      getUserByEmail: jest.fn(),
+      hasUsers: jest.fn(),
+      createInitialAdmin: jest.fn(),
+      getUserById: jest.fn(),
+      getRequiredUserById: jest.fn(),
+      buildUserAccessState: jest.fn(),
+      createInvitation: jest.fn(),
+      getActiveInvitations: jest.fn(),
+      getInvitationByToken: jest.fn(),
+      acceptInvitation: jest.fn(),
+    };
+
+    const mockRefreshTokenRepo = {
+      save: jest.fn(),
+      find: jest.fn(),
+      update: jest.fn(),
+    };
+
+    const mockPasswordResetTokenRepo = {
+      save: jest.fn(),
+      findOne: jest.fn(),
+      update: jest.fn(),
+      manager: {
+        save: jest.fn(),
+      },
+    };
+
+    const mockConfigService = {
+      get: jest.fn((key: string) => {
+        if (key === 'passwordResetTokenExpiresInMinutes') return 60;
+        if (key === 'frontendUrl') return 'http://localhost:3000';
+        return undefined;
+      }),
+    };
+
+    const mockAuthMailService = {
+      isConfigured: jest.fn(() => true),
+      sendPasswordResetEmail: jest.fn(),
+      sendUserInvitationEmail: jest.fn(),
+    };
+
+    const mockAuditLogService = {
+      record: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: JwtService, useValue: mockJwtService },
+        { provide: UsersService, useValue: mockUsersService },
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: AuthMailService, useValue: mockAuthMailService },
+        { provide: AuditLogService, useValue: mockAuditLogService },
+        { provide: getRepositoryToken(RefreshToken), useValue: mockRefreshTokenRepo },
+        { provide: getRepositoryToken(PasswordResetToken), useValue: mockPasswordResetTokenRepo },
+      ],
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+    jwtService = module.get(JwtService);
+    usersService = module.get(UsersService);
+    refreshTokenRepo = module.get(getRepositoryToken(RefreshToken));
+    passwordResetTokenRepo = module.get(getRepositoryToken(PasswordResetToken));
+    authMailService = module.get(AuthMailService);
+    auditLogService = module.get(AuditLogService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('validateUser', () => {
+    it('should return payload when credentials are valid', async () => {
+      usersService.getUserByUsernameOrEmail.mockResolvedValue(mockUser as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      const result = await service.validateUser('testuser', 'password123');
+
+      expect(result).toEqual({
+        userId: mockUser.id,
+        username: mockUser.username,
+        role: mockUser.role,
+      });
+      expect(usersService.getUserByUsernameOrEmail).toHaveBeenCalledWith('testuser');
+      expect(bcrypt.compare).toHaveBeenCalledWith('password123', mockUser.password);
+    });
+
+    it('should return null when user is not found', async () => {
+      usersService.getUserByUsernameOrEmail.mockResolvedValue(null);
+
+      const result = await service.validateUser('nonexistent', 'password');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when user is inactive', async () => {
+      usersService.getUserByUsernameOrEmail.mockResolvedValue({ ...mockUser, isActive: false } as any);
+
+      const result = await service.validateUser('testuser', 'password');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when password is invalid', async () => {
+      usersService.getUserByUsernameOrEmail.mockResolvedValue(mockUser as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      const result = await service.validateUser('testuser', 'wrongpassword');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null and log error on exception', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      usersService.getUserByUsernameOrEmail.mockRejectedValue(new Error('DB error'));
+
+      const result = await service.validateUser('testuser', 'password');
+
+      expect(result).toBeNull();
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('generateJwt', () => {
+    it('should return access token, refresh token, username and expires_in', async () => {
+      const mockAccessToken = 'jwt.access.token';
+      const mockHashedToken = 'hashed.refresh.token';
+      
+      jwtService.sign.mockReturnValue(mockAccessToken);
+      jwtService.decode.mockReturnValue({ iat: 100, exp: 120 } as any);
+      (bcrypt.hash as jest.Mock).mockResolvedValue(mockHashedToken);
+      refreshTokenRepo.save.mockResolvedValue({} as any);
+
+      const payload: PayloadToken = {
+        userId: 1,
+        username: 'testuser',
+        role: 'USER',
+      };
+
+      const result = await service.generateJwt(payload);
+
+      expect(result).toEqual({
+        access_token: mockAccessToken,
+        refresh_token: 'mock-random-token',
+        username: 'testuser',
+        expires_in: 20,
+      });
+      expect(jwtService.sign).toHaveBeenCalledWith(payload);
+      expect(refreshTokenRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          token: mockHashedToken,
+          revoked: false,
+        })
+      );
+    });
+  });
+
+  describe('generateHash', () => {
+    it('should hash password with bcrypt', async () => {
+      const hashedPassword = 'hashed$password';
+      (bcrypt.hash as jest.Mock).mockResolvedValue(hashedPassword);
+
+      const result = await service.generateHash('mypassword');
+
+      expect(result).toBe(hashedPassword);
+      expect(bcrypt.hash).toHaveBeenCalledWith('mypassword', 12);
+    });
+  });
+
+  describe('getSetupStatus', () => {
+    it('should report whether setup is required', async () => {
+      usersService.hasUsers.mockResolvedValue(false);
+      authMailService.isConfigured.mockReturnValue(true);
+
+      await expect(service.getSetupStatus()).resolves.toEqual({
+        requiresSetup: true,
+        passwordRecoveryEnabled: true,
+      });
+    });
+  });
+
+  describe('createPasswordReset', () => {
+    it('should create a reset token and send the email', async () => {
+      usersService.getUserByEmail.mockResolvedValue(mockUser as any);
+      passwordResetTokenRepo.update.mockResolvedValue({} as any);
+      passwordResetTokenRepo.save.mockResolvedValue({} as any);
+      authMailService.sendPasswordResetEmail.mockResolvedValue(undefined);
+
+      await service.createPasswordReset('test@example.com');
+
+      expect(passwordResetTokenRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          tokenHash: 'hashed-reset-token',
+          usedAt: null,
+        }),
+      );
+      expect(authMailService.sendPasswordResetEmail).toHaveBeenCalledWith(
+        'test@example.com',
+        'testuser',
+        'http://localhost:3000/?resetToken=mock-random-token',
+      );
+    });
+  });
+
+  describe('createInvitation', () => {
+    it('should send invitation email automatically when smtp is configured and email exists', async () => {
+      usersService.createInvitation.mockResolvedValue({
+        invitation: {
+          id: 7,
+          email: 'invite@example.com',
+          role: 'USER',
+          permissions: { accessAllServers: true },
+          serverAccess: [],
+          expiresAt: new Date('2026-01-01T00:00:00Z'),
+        },
+        inviteUrl: 'http://localhost:3000/?inviteToken=abc',
+      } as any);
+      authMailService.isConfigured.mockReturnValue(true);
+      authMailService.sendUserInvitationEmail.mockResolvedValue(undefined);
+
+      const result = await service.createInvitation({
+        email: 'invite@example.com',
+        permissions: { accessAllServers: true },
+      } as any, { userId: 1, username: 'admin', role: 'ADMIN' });
+
+      expect(authMailService.sendUserInvitationEmail).toHaveBeenCalledWith(
+        'invite@example.com',
+        'http://localhost:3000/?inviteToken=abc',
+      );
+      expect(auditLogService.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'create_invitation', actorUserId: 1, actorUsername: 'admin' }),
+      );
+      expect(result.emailSent).toBe(true);
+    });
+
+    it('should skip invitation email when smtp is not configured', async () => {
+      usersService.createInvitation.mockResolvedValue({
+        invitation: {
+          id: 8,
+          email: 'invite@example.com',
+          role: 'USER',
+          permissions: { accessAllServers: false },
+          serverAccess: ['alpha'],
+          expiresAt: new Date('2026-01-01T00:00:00Z'),
+        },
+        inviteUrl: 'http://localhost:3000/?inviteToken=abc',
+      } as any);
+      authMailService.isConfigured.mockReturnValue(false);
+
+      const result = await service.createInvitation({
+        email: 'invite@example.com',
+        permissions: { accessAllServers: false },
+      } as any, { userId: 1, username: 'admin', role: 'ADMIN' });
+
+      expect(authMailService.sendUserInvitationEmail).not.toHaveBeenCalled();
+      expect(result.emailSent).toBe(false);
+    });
+  });
+
+  describe('getSessionUser', () => {
+    it('should return role and effective access for the current user', async () => {
+      usersService.getRequiredUserById.mockResolvedValue(mockUser as any);
+      usersService.buildUserAccessState.mockReturnValue({
+        permissions: { accessAllServers: false },
+        serverAccess: ['alpha'],
+      } as any);
+
+      const result = await service.getSessionUser(1);
+
+      expect(result).toEqual({
+        userId: 1,
+        username: 'testuser',
+        role: 'USER',
+        access: {
+          permissions: { accessAllServers: false },
+          serverAccess: ['alpha'],
+        },
+      });
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('should update the password and revoke tokens', async () => {
+      const resetTokenEntity = {
+        userId: 1,
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: null,
+        user: { ...mockUser },
+      };
+
+      (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-password');
+      passwordResetTokenRepo.findOne.mockResolvedValue(resetTokenEntity as any);
+      (passwordResetTokenRepo.manager.save as jest.Mock).mockResolvedValue({} as any);
+      passwordResetTokenRepo.update.mockResolvedValue({} as any);
+      refreshTokenRepo.update.mockResolvedValue({} as any);
+
+      await service.resetPassword('raw-token', 'new-password');
+
+      expect(passwordResetTokenRepo.findOne).toHaveBeenCalledWith({
+        where: { tokenHash: 'hashed-reset-token' },
+        relations: ['user'],
+      });
+      expect(passwordResetTokenRepo.manager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ password: 'new-hashed-password' }),
+      );
+      expect(refreshTokenRepo.update).toHaveBeenCalledWith({ userId: 1, revoked: false }, { revoked: true });
+    });
+  });
+});

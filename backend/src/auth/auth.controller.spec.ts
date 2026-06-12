@@ -1,0 +1,306 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { UnauthorizedException } from '@nestjs/common';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { Response, Request } from 'express';
+import { AuditLogService } from 'src/users/services/audit-log.service';
+
+describe('AuthController', () => {
+  let controller: AuthController;
+  let authService: jest.Mocked<AuthService>;
+  let auditLogService: jest.Mocked<AuditLogService>;
+  let mockResponse: Partial<Response>;
+  let mockRequest: Partial<Request>;
+  let originalNodeEnv: string | undefined;
+  let originalAllowInsecureCookies: string | undefined;
+
+  beforeEach(async () => {
+    originalNodeEnv = process.env.NODE_ENV;
+    originalAllowInsecureCookies = process.env.ALLOW_INSECURE_AUTH_COOKIES;
+    process.env.NODE_ENV = 'test';
+    delete process.env.ALLOW_INSECURE_AUTH_COOKIES;
+
+    const mockAuthService = {
+      validateUser: jest.fn(),
+      generateJwt: jest.fn(),
+      getSetupStatus: jest.fn(),
+      createInitialAdmin: jest.fn(),
+      validateRefreshToken: jest.fn(),
+      revokeRefreshToken: jest.fn(),
+      createPasswordReset: jest.fn(),
+      resetPassword: jest.fn(),
+    };
+
+    const mockAuditLogService = {
+      record: jest.fn(),
+    };
+
+    mockResponse = {
+      cookie: jest.fn(),
+      clearCookie: jest.fn(),
+    };
+
+    mockRequest = {
+      cookies: {},
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [
+        { provide: AuthService, useValue: mockAuthService },
+        { provide: AuditLogService, useValue: mockAuditLogService },
+      ],
+    }).compile();
+
+    controller = module.get<AuthController>(AuthController);
+    authService = module.get(AuthService);
+    auditLogService = module.get(AuditLogService);
+  });
+
+  afterEach(() => {
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+    if (originalAllowInsecureCookies === undefined) {
+      delete process.env.ALLOW_INSECURE_AUTH_COOKIES;
+    } else {
+      process.env.ALLOW_INSECURE_AUTH_COOKIES = originalAllowInsecureCookies;
+    }
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+
+  describe('login', () => {
+    it('should return username and expires_in and set cookies on successful login', async () => {
+      const mockPayload = { userId: 1, username: 'admin', role: 'ADMIN' };
+
+      authService.validateUser.mockResolvedValue(mockPayload);
+      authService.generateJwt.mockResolvedValue({
+        access_token: 'jwt.access.token',
+        refresh_token: 'jwt.refresh.token',
+        username: 'admin',
+        expires_in: 900,
+      });
+
+      const result = await controller.login({ username: 'admin', password: 'password' }, mockResponse as Response);
+
+      expect(result).toEqual({
+        username: 'admin',
+        expires_in: 900,
+      });
+      expect(auditLogService.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'login', actorUserId: 1, actorUsername: 'admin' }),
+      );
+      expect(mockResponse.cookie).toHaveBeenCalledTimes(2);
+      expect(mockResponse.cookie).toHaveBeenCalledWith('access_token', 'jwt.access.token', expect.any(Object));
+      expect(mockResponse.cookie).toHaveBeenCalledWith('refresh_token', 'jwt.refresh.token', expect.any(Object));
+    });
+
+    it('should set secure cookies in production by default', async () => {
+      process.env.NODE_ENV = 'production';
+      delete process.env.ALLOW_INSECURE_AUTH_COOKIES;
+
+      const mockPayload = { userId: 1, username: 'admin', role: 'ADMIN' };
+      authService.validateUser.mockResolvedValue(mockPayload);
+      authService.generateJwt.mockResolvedValue({
+        access_token: 'jwt.access.token',
+        refresh_token: 'jwt.refresh.token',
+        username: 'admin',
+        expires_in: 900,
+      });
+
+      await controller.login({ username: 'admin', password: 'password' }, mockResponse as Response);
+
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'access_token',
+        'jwt.access.token',
+        expect.objectContaining({ secure: true, httpOnly: true, sameSite: 'lax' }),
+      );
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'refresh_token',
+        'jwt.refresh.token',
+        expect.objectContaining({ secure: true, httpOnly: true, sameSite: 'lax' }),
+      );
+    });
+
+    it('should set insecure cookies when ALLOW_INSECURE_AUTH_COOKIES=true in production', async () => {
+      process.env.NODE_ENV = 'production';
+      process.env.ALLOW_INSECURE_AUTH_COOKIES = 'true';
+
+      const mockPayload = { userId: 1, username: 'admin', role: 'ADMIN' };
+      authService.validateUser.mockResolvedValue(mockPayload);
+      authService.generateJwt.mockResolvedValue({
+        access_token: 'jwt.access.token',
+        refresh_token: 'jwt.refresh.token',
+        username: 'admin',
+        expires_in: 900,
+      });
+
+      await controller.login({ username: 'admin', password: 'password' }, mockResponse as Response);
+
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'access_token',
+        'jwt.access.token',
+        expect.objectContaining({ secure: false, httpOnly: true, sameSite: 'lax' }),
+      );
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'refresh_token',
+        'jwt.refresh.token',
+        expect.objectContaining({ secure: false, httpOnly: true, sameSite: 'lax' }),
+      );
+    });
+
+    it('should set secure cookies in development mode by default', async () => {
+      process.env.NODE_ENV = 'development';
+      delete process.env.ALLOW_INSECURE_AUTH_COOKIES;
+
+      const mockPayload = { userId: 1, username: 'admin', role: 'ADMIN' };
+      authService.validateUser.mockResolvedValue(mockPayload);
+      authService.generateJwt.mockResolvedValue({
+        access_token: 'jwt.access.token',
+        refresh_token: 'jwt.refresh.token',
+        username: 'admin',
+        expires_in: 900,
+      });
+
+      await controller.login({ username: 'admin', password: 'password' }, mockResponse as Response);
+
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'access_token',
+        'jwt.access.token',
+        expect.objectContaining({ secure: true, httpOnly: true, sameSite: 'lax' }),
+      );
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'refresh_token',
+        'jwt.refresh.token',
+        expect.objectContaining({ secure: true, httpOnly: true, sameSite: 'lax' }),
+      );
+    });
+
+    it('should throw UnauthorizedException on invalid credentials', async () => {
+      authService.validateUser.mockResolvedValue(null);
+
+      await expect(controller.login({ username: 'admin', password: 'wrong' }, mockResponse as Response)).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('setup status', () => {
+    it('should return the setup status', async () => {
+      authService.getSetupStatus.mockResolvedValue({ requiresSetup: true, passwordRecoveryEnabled: false });
+
+      await expect(controller.getSetupStatus()).resolves.toEqual({
+        requiresSetup: true,
+        passwordRecoveryEnabled: false,
+      });
+    });
+  });
+
+  describe('setup admin', () => {
+    it('should create the initial admin and set cookies', async () => {
+      authService.createInitialAdmin.mockResolvedValue({
+        access_token: 'jwt.access.token',
+        refresh_token: 'jwt.refresh.token',
+        username: 'admin',
+        expires_in: 900,
+      });
+
+      const result = await controller.setupAdmin(
+        { username: 'admin', email: 'admin@example.com', password: 'password123' },
+        mockResponse as Response,
+      );
+
+      expect(result).toEqual({ username: 'admin', expires_in: 900 });
+      expect(mockResponse.cookie).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('refresh', () => {
+    it('should return new tokens when refresh token is valid', async () => {
+      const mockPayload = { userId: 1, username: 'admin', role: 'ADMIN' };
+      mockRequest.cookies = { refresh_token: 'valid.refresh.token' };
+
+      authService.validateRefreshToken.mockResolvedValue(mockPayload);
+      authService.generateJwt.mockResolvedValue({
+        access_token: 'new.access.token',
+        refresh_token: 'new.refresh.token',
+        username: 'admin',
+        expires_in: 900,
+      });
+
+      const result = await controller.refresh(mockRequest as Request, mockResponse as Response);
+
+      expect(result).toEqual({
+        username: 'admin',
+        expires_in: 900,
+      });
+      expect(mockResponse.cookie).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw UnauthorizedException when refresh token is missing', async () => {
+      mockRequest.cookies = {};
+
+      await expect(controller.refresh(mockRequest as Request, mockResponse as Response)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should clear cookies and throw when refresh token is invalid', async () => {
+      mockRequest.cookies = { refresh_token: 'invalid.token' };
+      authService.validateRefreshToken.mockResolvedValue(null);
+
+      await expect(controller.refresh(mockRequest as Request, mockResponse as Response)).rejects.toThrow(UnauthorizedException);
+
+      expect(mockResponse.clearCookie).toHaveBeenCalledWith('access_token');
+      expect(mockResponse.clearCookie).toHaveBeenCalledWith('refresh_token');
+    });
+  });
+
+  describe('logout', () => {
+    it('should clear cookies and revoke token', async () => {
+      mockRequest.cookies = { refresh_token: 'token.to.revoke' };
+      authService.revokeRefreshToken.mockResolvedValue(undefined);
+
+      const result = await controller.logout(mockRequest as Request, mockResponse as Response);
+
+      expect(result).toEqual({ message: 'Logged out successfully' });
+      expect(authService.revokeRefreshToken).toHaveBeenCalledWith('token.to.revoke');
+      expect(mockResponse.clearCookie).toHaveBeenCalledWith('access_token');
+      expect(mockResponse.clearCookie).toHaveBeenCalledWith('refresh_token');
+    });
+
+    it('should still clear cookies even when no refresh token present', async () => {
+      mockRequest.cookies = {};
+
+      const result = await controller.logout(mockRequest as Request, mockResponse as Response);
+
+      expect(result).toEqual({ message: 'Logged out successfully' });
+      expect(authService.revokeRefreshToken).not.toHaveBeenCalled();
+      expect(mockResponse.clearCookie).toHaveBeenCalledWith('access_token');
+      expect(mockResponse.clearCookie).toHaveBeenCalledWith('refresh_token');
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('should delegate password reset request', async () => {
+      authService.createPasswordReset.mockResolvedValue(undefined);
+
+      await expect(controller.forgotPassword({ email: 'admin@example.com' })).resolves.toEqual({
+        message: 'If the email exists, a password reset link has been sent',
+      });
+      expect(authService.createPasswordReset).toHaveBeenCalledWith('admin@example.com');
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('should reset password', async () => {
+      authService.resetPassword.mockResolvedValue(undefined);
+
+      await expect(
+        controller.resetPassword({ token: 'reset-token', password: 'new-password-123' }),
+      ).resolves.toEqual({ message: 'Password reset successfully' });
+      expect(authService.resetPassword).toHaveBeenCalledWith('reset-token', 'new-password-123');
+    });
+  });
+});

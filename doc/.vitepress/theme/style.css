@@ -1,0 +1,389 @@
+:root {
+  --minecraft-font-ui: 'Press Start 2P', 'VT323', monospace;
+  --minecraft-font-body: 'Atkinson Hyperlegible', 'Segoe UI', Roboto, sans-serif;
+
+  --vp-font-family-base: var(--minecraft-font-body);
+  --vp-font-family-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+  --vp-c-brand-1: #6aa84f;
+  --vp-c-brand-2: #84c766;
+  --vp-c-brand-3: #4f7f3d;
+  --vp-c-brand-soft: rgba(106, 168, 79, 0.2);
+
+  --vp-c-bg: #f5f2e8;
+  --vp-c-bg-alt: #ede7d7;
+  --vp-c-bg-elv: #fffaf0;
+  --vp-c-bg-soft: #e8e2d2;
+
+  --vp-c-text-1: #1f2a1a;
+  --vp-c-text-2: #3e4c36;
+  --vp-c-text-3: #5f6b57;
+
+  --vp-button-brand-bg: #5f9a44;
+  --vp-button-brand-hover-bg: #6eb34f;
+  --vp-button-brand-active-bg: #4f7f3d;
+  --vp-button-brand-text: #f8fff4;
+  --vp-button-brand-border: #2c4422;
+
+  --vp-button-alt-bg: #d4ccba;
+  --vp-button-alt-hover-bg: #c8bfa9;
+  --vp-button-alt-active-bg: #b7ac92;
+  --vp-button-alt-text: #2f3828;
+  --vp-button-alt-border: #5a634f;
+}
+
+.dark {
+  --vp-c-brand-1: #82c763;
+  --vp-c-brand-2: #9cdc7a;
+  --vp-c-brand-3: #5a9744;
+  --vp-c-brand-soft: rgba(130, 199, 99, 0.25);
+
+  --vp-c-bg: #11170f;
+  --vp-c-bg-alt: #172114;
+  --vp-c-bg-elv: #202b1d;
+  --vp-c-bg-soft: #263221;
+
+  --vp-c-text-1: #ebf3e5;
+  --vp-c-text-2: #c9d7bf;
+  --vp-c-text-3: #9ead96;
+
+  --vp-button-brand-bg: #5f9a44;
+  --vp-button-brand-hover-bg: #6eb34f;
+  --vp-button-brand-active-bg: #4f7f3d;
+  --vp-button-brand-text: #f6fff0;
+  --vp-button-brand-border: #2f4d24;
+
+  --vp-button-alt-bg: #2c3727;
+  --vp-button-alt-hover-bg: #394735;
+  --vp-button-alt-active-bg: #263121;
+  --vp-button-alt-text: #d7e3d0;
+  --vp-button-alt-border: #5a6f52;
+}
+
+body {
+  background-image:
+    linear-gradient(rgba(44, 68, 34, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(44, 68, 34, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at 20% 10%, rgba(153, 196, 116, 0.18), transparent 45%),
+    radial-gradient(circle at 90% 80%, rgba(104, 132, 86, 0.15), transparent 40%);
+  background-size: 24px 24px, 24px 24px, auto, auto;
+  background-attachment: fixed;
+}
+
+.dark body {
+  background-image:
+    linear-gradient(rgba(120, 152, 102, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 152, 102, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at 10% 8%, rgba(95, 154, 68, 0.22), transparent 45%),
+    radial-gradient(circle at 95% 80%, rgba(75, 103, 62, 0.24), transparent 40%);
+}
+
+.VPNavBarTitle,
+.VPNavBarMenuLink,
+.VPFlyout .text,
+.VPSidebarItem .text,
+.VPDoc h1,
+.VPDoc h2,
+.VPDoc h3,
+.VPDoc h4,
+.VPHero .name,
+.VPHero .text,
+.VPHero .tagline,
+.VPButton,
+.vp-badge,
+.VPLink.link {
+  font-family: var(--minecraft-font-ui);
+  letter-spacing: 0.03em;
+}
+
+.VPNavBarMenuLink,
+.VPFlyout .text {
+  font-size: 10px;
+  letter-spacing: 0.01em;
+}
+
+.VPNavBarTitle .title {
+  font-size: 10px;
+  letter-spacing: 0.01em;
+}
+
+.VPSidebarItem.level-0 .text {
+  font-size: 10px;
+  letter-spacing: 0.015em;
+}
+
+.VPSidebarItem.level-1 .text,
+.VPSidebarItem.level-2 .text,
+.VPSidebarItem.level-3 .text,
+.VPSidebarItem.level-4 .text,
+.VPSidebarItem.level-5 .text {
+  font-size: 9.5px;
+  letter-spacing: 0.01em;
+}
+
+.VPDoc p,
+.VPDoc li,
+.VPDoc td,
+.VPDoc blockquote,
+.VPDoc .custom-block,
+.VPLocalSearchBox,
+.DocSearch-Button,
+.DocSearch-Input {
+  font-family: var(--minecraft-font-body);
+}
+
+.VPNavBar,
+.VPSidebar {
+  backdrop-filter: blur(8px);
+}
+
+.VPNavBar {
+  border-bottom: 3px solid rgba(41, 64, 31, 0.55);
+  background: linear-gradient(180deg, rgba(240, 236, 223, 0.9), rgba(233, 227, 212, 0.9));
+}
+
+.dark .VPNavBar {
+  border-bottom: 3px solid rgba(143, 177, 115, 0.3);
+  background: linear-gradient(180deg, rgba(24, 34, 20, 0.9), rgba(17, 25, 14, 0.9));
+}
+
+.VPSidebar {
+  border-right: 3px solid rgba(49, 72, 40, 0.35);
+  background: linear-gradient(180deg, rgba(249, 246, 237, 0.82), rgba(233, 227, 212, 0.9));
+}
+
+.dark .VPSidebar {
+  border-right: 3px solid rgba(126, 158, 102, 0.3);
+  background: linear-gradient(180deg, rgba(26, 36, 22, 0.88), rgba(20, 28, 17, 0.95));
+}
+
+.VPSidebarItem.level-0.is-active > .item .text {
+  color: var(--vp-c-brand-1);
+}
+
+.VPButton {
+  border-width: 3px;
+  border-style: solid;
+  border-radius: 4px;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  text-transform: uppercase;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.VPButton:hover {
+  transform: translateY(-1px);
+}
+
+.VPButton:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.VPButton.brand {
+  border-color: var(--vp-button-brand-border);
+}
+
+.VPButton.alt {
+  border-color: var(--vp-button-alt-border);
+}
+
+.VPHero .image img {
+  image-rendering: pixelated;
+  filter: drop-shadow(0 12px 30px rgba(29, 45, 23, 0.35));
+}
+
+.VPFeature {
+  border: 3px solid rgba(58, 86, 46, 0.5);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(250, 247, 239, 0.95), rgba(237, 231, 216, 0.95));
+  box-shadow: 0 8px 24px rgba(42, 66, 33, 0.12);
+}
+
+.VPFeature .icon {
+  width: 56px;
+  height: 56px;
+  border: 2px solid rgba(89, 120, 72, 0.45);
+  background: linear-gradient(180deg, rgba(146, 188, 115, 0.2), rgba(72, 98, 57, 0.22));
+  color: #d9f1cb;
+}
+
+.VPFeature .icon svg {
+  width: 30px;
+  height: 30px;
+  stroke: currentColor;
+}
+
+.VPFeature:hover .icon {
+  border-color: rgba(132, 199, 102, 0.7);
+  color: #efffe5;
+}
+
+.dark .VPFeature {
+  border: 3px solid rgba(110, 146, 86, 0.5);
+  background: linear-gradient(180deg, rgba(36, 48, 31, 0.94), rgba(27, 36, 23, 0.94));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.dark .VPFeature .icon {
+  border-color: rgba(104, 145, 80, 0.55);
+  background: linear-gradient(180deg, rgba(65, 93, 51, 0.45), rgba(39, 57, 31, 0.45));
+}
+
+.VPDoc div[class*='language-'] {
+  border: 3px solid rgba(50, 69, 43, 0.6);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dark .VPDoc div[class*='language-'] {
+  border-color: rgba(121, 154, 99, 0.55);
+}
+
+.vp-doc [class*='language-'] > button.copy {
+  border-radius: 4px;
+  border-width: 2px;
+  transition: transform 0.12s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.vp-doc [class*='language-'] > button.copy:hover {
+  transform: translateY(-1px) scale(1.04);
+}
+
+.vp-doc [class*='language-'] > button.copy.copied {
+  animation: copy-pop 0.28s ease;
+  box-shadow: 0 0 0 3px rgba(130, 199, 99, 0.3);
+}
+
+.vp-doc [class*='language-'] > button.copy.copied::before {
+  font-family: var(--minecraft-font-ui);
+  font-size: 9px;
+}
+
+@keyframes copy-pop {
+  0% {
+    transform: scale(0.9);
+  }
+
+  65% {
+    transform: scale(1.08);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.VPDoc .custom-block {
+  border-width: 3px;
+  border-radius: 6px;
+}
+
+.VPDoc table {
+  display: table;
+  width: 100%;
+  min-width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+  border: 3px solid rgba(73, 95, 60, 0.5);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.VPDoc th,
+.VPDoc td {
+  border: 1px solid rgba(89, 112, 76, 0.45);
+}
+
+.VPDoc table thead {
+  background: rgba(106, 168, 79, 0.15);
+}
+
+.dark .VPDoc table thead {
+  background: rgba(130, 199, 99, 0.2);
+}
+
+.VPDoc img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border: 3px solid rgba(73, 95, 60, 0.5);
+  border-radius: 8px;
+  box-shadow: 0 10px 22px rgba(22, 37, 17, 0.2);
+  background: rgba(236, 242, 228, 0.4);
+}
+
+.dark .VPDoc img {
+  border-color: rgba(116, 150, 92, 0.52);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.3);
+  background: rgba(43, 56, 36, 0.45);
+}
+
+.vp-doc .home-highlights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 28px;
+  margin: 14px 0 24px;
+}
+
+.vp-doc .home-highlight {
+  padding: 10px 0 14px;
+  border-bottom: 2px dashed rgba(96, 126, 77, 0.55);
+}
+
+.vp-doc .home-highlight h3 {
+  margin: 0;
+  font: 400 11px/1.5 var(--minecraft-font-ui);
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc .home-highlight p {
+  margin: 8px 0 0;
+}
+
+.dark .vp-doc .home-highlight {
+  border-bottom-color: rgba(125, 160, 102, 0.45);
+}
+
+@media (max-width: 768px) {
+  .vp-doc .home-highlights {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .VPDoc table {
+    display: block;
+    min-width: 100%;
+    overflow-x: auto;
+  }
+
+  .VPNavBarMenuLink,
+  .VPFlyout .text,
+  .VPSidebarItem .text {
+    font-size: 9px;
+    letter-spacing: 0.01em;
+  }
+
+  .VPDoc h1,
+  .VPDoc h2,
+  .VPHero .name,
+  .VPHero .text {
+    letter-spacing: 0.01em;
+    line-height: 1.25;
+  }
+
+  .VPHero .tagline {
+    font-size: 12px;
+    line-height: 1.8;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vp-doc [class*='language-'] > button.copy,
+  .vp-doc [class*='language-'] > button.copy:hover,
+  .vp-doc [class*='language-'] > button.copy.copied {
+    animation: none;
+    transform: none;
+    transition: none;
+  }
+}

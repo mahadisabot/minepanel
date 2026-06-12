@@ -1,0 +1,26 @@
+# Minepanel Documentation - Robots Configuration
+# Allow all compliant crawlers
+
+User-agent: *
+Allow: /
+Disallow: /hashmap.json
+Disallow: /agents
+
+# Specific crawlers
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 0
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 1
+
+# Note: Reputable AI crawlers (e.g. GPTBot, Anthropic) are allowed
+# to index the docs to improve discoverability and integrations.
+# If abusive scraping appears, re-add specific Disallow entries.
+
+# Sitemap
+Sitemap: https://minepanel.ketbome.com/sitemap.xml

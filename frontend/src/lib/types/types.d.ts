@@ -1,0 +1,260 @@
+/**
+ * Server edition type - Java or Bedrock
+ */
+export type ServerEdition = 'JAVA' | 'BEDROCK';
+
+/**
+ * Server type - different server software variants
+ */
+export type ServerType =
+  | 'VANILLA'
+  | 'FORGE'
+  | 'NEOFORGE'
+  | 'AUTO_CURSEFORGE'
+  | 'MODRINTH'
+  | 'CURSEFORGE'
+  | 'GTNH'
+  | 'SPIGOT'
+  | 'FABRIC'
+  | 'MAGMA'
+  | 'PAPER'
+  | 'QUILT'
+  | 'BUKKIT'
+  | 'PUFFERFISH'
+  | 'PURPUR'
+  | 'LEAF'
+  | 'FOLIA';
+
+/**
+ * Simplified server list item returned by GET /servers
+ * Contains only essential information for display in lists
+ */
+export interface ServerListItem {
+  id: string;
+  serverName: string;
+  motd: string;
+  port: string;
+  edition?: ServerEdition;
+  serverType: ServerType;
+  active: boolean;
+}
+
+/**
+ * Complete server configuration
+ * Used for detailed server settings and configuration
+ */
+export interface ServerConfig {
+  id: string;
+  active: boolean;
+  serverExists?: boolean;
+  edition?: ServerEdition;
+  serverType: ServerType;
+
+  // General configuration
+  serverName: string;
+  motd: string;
+  port: string;
+  difficulty: 'peaceful' | 'easy' | 'normal' | 'hard';
+  maxPlayers: string;
+  ops: string;
+  onlineMode: boolean;
+  pvp: boolean;
+  commandBlock: boolean;
+  allowFlight: boolean;
+  gameMode: 'survival' | 'creative' | 'adventure' | 'spectator';
+  seed?: string;
+  worldSource?: string;
+  worldScope?: 'local' | 'global';
+  worldLevelName?: string;
+  forceWorldCopy?: boolean;
+  levelType:
+    | 'minecraft:default'
+    | 'minecraft:flat'
+    | 'minecraft:large_biomes'
+    | 'minecraft:amplified'
+    | 'minecraft:single_biome_surface'
+    | 'rwg';
+  hardcore: boolean;
+  spawnAnimals: boolean;
+  spawnMonsters: boolean;
+  spawnNpcs: boolean;
+  generateStructures: boolean;
+  allowNether: boolean;
+  entityBroadcastRange: string;
+
+  enableAutoStop: boolean;
+  autoStopTimeoutEst: string;
+  autoStopTimeoutInit: string;
+
+  enableAutoPause: boolean;
+  autoPauseTimeoutEst: string;
+  autoPauseTimeoutInit: string;
+  autoPauseKnockInterface: string;
+
+  playerIdleTimeout: string;
+  preventProxyConnections: boolean;
+  opPermissionLevel: string;
+
+  // RCON
+  enableRcon: boolean;
+  rconPort: string;
+  rconPassword: string;
+  broadcastRconToOps: boolean;
+
+  // Resources
+  initMemory: string;
+  maxMemory: string;
+  cpuLimit: string;
+  cpuReservation: string;
+  memoryReservation: string;
+  viewDistance: string;
+  simulationDistance: string;
+  uid: string;
+  gid: string;
+
+  // Backup configuration
+  enableBackup: boolean;
+  backupInterval: string;
+  backupMethod: 'tar' | 'rsync' | 'restic' | 'rclone';
+  backupInitialDelay: string;
+  backupPruneDays: string;
+  backupDestDir: string;
+  backupName: string;
+  backupOnStartup: boolean;
+  pauseIfNoPlayers: boolean;
+  playersOnlineCheckInterval: string;
+  rconRetries: string;
+  rconRetryInterval: string;
+  backupIncludes: string;
+  backupExcludes: string;
+  tarCompressMethod: 'gzip' | 'bzip2' | 'zstd';
+  enableSaveAll: boolean;
+  enableSync: boolean;
+
+  useAikarFlags: boolean;
+  enableJmx: boolean;
+  jmxHost: string;
+  jvmOpts: string;
+  jvmXxOpts: string;
+  jvmDdOpts: string;
+  extraArgs: string;
+  tz: string;
+  enableRollingLogs: boolean;
+  logTimestamp: boolean | undefined;
+
+  // Docker
+  dockerImage: string;
+  minecraftVersion: string;
+  dockerVolumes?: string;
+  restartPolicy: 'no' | 'always' | 'on-failure' | 'unless-stopped';
+  stopDelay: string;
+  execDirectly: boolean;
+  envVars: string;
+  dockerLabels?: string;
+  extraPorts: string[];
+
+  // Forge specific
+  forgeBuild?: string;
+
+  // Neoforge specific
+  neoforgeBuild?: string;
+
+  // Fabric specific
+  fabricLoaderVersion?: string;
+  fabricLauncherVersion?: string;
+  fabricLauncher?: string;
+  fabricLauncherUrl?: string;
+  fabricForceReinstall?: boolean;
+
+  // Modrinth specific
+  modrinthProjects?: string;
+  modrinthDownloadDependencies?: 'none' | 'required' | 'optional';
+  modrinthDefaultVersionType?: 'release' | 'beta' | 'alpha';
+  modrinthLoader?: string;
+
+  modrinthModpack?: string;
+
+  // GTNH specific
+  gtnhPackVersion?: string;
+  gtnhDeleteBackups?: boolean;
+  skipGtnhUpdateCheck?: boolean;
+
+  // CurseForge specific
+  cfMethod?: 'url' | 'slug' | 'file';
+  cfUrl?: string;
+  cfSlug?: string;
+  cfFile?: string;
+  cfApiKey?: string;
+  cfSync?: boolean;
+  cfFiles?: string;
+  cfForceInclude?: string;
+  cfExclude?: string;
+  cfFilenameMatcher?: string;
+  cfParallelDownloads?: string;
+  cfOverridesSkipExisting?: boolean;
+  cfSetLevelFrom?: string;
+
+  // Manual CurseForge (deprecated) specific
+  cfServerMod?: string;
+  cfBaseDir?: string;
+  useModpackStartScript?: boolean;
+  ftbLegacyJavaFixer?: boolean;
+
+  // Plugin specific (for SPIGOT, PAPER, BUKKIT, PUFFERFISH, PURPUR, LEAF, FOLIA)
+  spigetResources?: string;
+
+  // Paper specific
+  paperBuild?: string;
+  paperChannel?: string;
+  paperDownloadUrl?: string;
+
+  // Bukkit/Spigot specific
+  bukkitDownloadUrl?: string;
+  spigotDownloadUrl?: string;
+  buildFromSource?: boolean;
+
+  // Pufferfish specific
+  pufferfishBuild?: string;
+  useFlareFlags?: boolean;
+
+  // Purpur specific
+  purpurBuild?: string;
+  purpurDownloadUrl?: string;
+
+  // Leaf specific
+  leafBuild?: string;
+
+  // Folia specific
+  foliaBuild?: string;
+  foliaChannel?: string;
+  foliaDownloadUrl?: string;
+
+  // General Paper/Bukkit/Spigot config
+  skipDownloadDefaults?: boolean;
+
+  // Proxy configuration
+  proxyHostname?: string;
+  useProxy?: boolean;
+  usePlayit?: boolean;
+  playitSecret?: string;
+
+  // Bedrock-specific configuration
+  allowCheats?: boolean;
+  tickDistance?: string;
+  maxThreads?: string;
+  defaultPlayerPermissionLevel?: 'visitor' | 'member' | 'operator';
+  texturepackRequired?: boolean;
+  serverPortV6?: string;
+  whiteList?: boolean;
+}
+
+export interface AvailableWorld {
+  name: string;
+  source: string;
+  scope: 'local' | 'global';
+  type: 'directory' | 'archive';
+  defaultLevelName: string;
+  displayPath: string;
+  selected: boolean;
+  copied: boolean;
+}

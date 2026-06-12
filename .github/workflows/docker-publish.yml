@@ -1,0 +1,236 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+env:
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      root: ${{ steps.filter.outputs.root }}
+      version: ${{ steps.version.outputs.version }}
+      is_main: ${{ github.ref == 'refs/heads/main' }}
+      branch_name: ${{ steps.branch.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+            root:
+              - 'Dockerfile'
+              - 'config.json'
+              - 'frontend/**'
+              - 'backend/**'
+      - name: Read version
+        id: version
+        run: echo "version=$(jq -r '.version' config.json)" >> $GITHUB_OUTPUT
+      - name: Get branch name
+        id: branch
+        run: echo "name=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+  # Main image (fullstack) - Only on main branch
+  build-main:
+    needs: changes
+    if: github.ref == 'refs/heads/main' && (needs.changes.outputs.root == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/minepanel
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ needs.changes.outputs.version }},enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # Standalone backend - Production (main branch only)
+  build-backend:
+    needs: changes
+    if: github.ref == 'refs/heads/main' && (needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/minepanel-backend
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.changes.outputs.version }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # Standalone frontend - Production (main branch only)
+  build-frontend:
+    needs: changes
+    if: github.ref == 'refs/heads/main' && (needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/minepanel-frontend
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.changes.outputs.version }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # Test backend - Development (non-main branches)
+  build-backend-test:
+    needs: changes
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/minepanel-backend-test:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # Test frontend - Development (non-main branches)
+  build-frontend-test:
+    needs: changes
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/minepanel-frontend-test:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # Create tag and release only if version changed
+  release:
+    needs: [changes, build-main]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Check if tag exists
+        id: check
+        run: |
+          if git rev-parse "v${{ needs.changes.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create tag
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ needs.changes.outputs.version }}" -m "Release v${{ needs.changes.outputs.version }}"
+          git push origin "v${{ needs.changes.outputs.version }}"
+
+      - name: Create Release
+        if: steps.check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.changes.outputs.version }}
+          name: Minepanel v${{ needs.changes.outputs.version }}
+          generate_release_notes: true
+          body: |
+            ## 🐳 Docker Images
+
+            ```bash
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/minepanel:${{ needs.changes.outputs.version }}
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/minepanel:latest
+            ```
+
+            Platforms: `linux/amd64`, `linux/arm64`
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

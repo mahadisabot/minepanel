@@ -1,0 +1,13 @@
+{
+  "name": "minepanel-upnp-helper",
+  "version": "1.0.0",
+  "description": "UPnP helper sidecar for Minepanel",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "nat-upnp": "^1.1.1"
+  }
+}

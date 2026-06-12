@@ -1,0 +1,24 @@
+import DefaultTheme from 'vitepress/theme';
+import CounterButton from './components/CounterButton.vue';
+import TerminalInstall from './components/TerminalInstall.vue';
+import TerminalCommand from './components/TerminalCommand.vue';
+import TerminalSequence from './components/TerminalSequence.vue';
+import EnvPresetTabs from './components/EnvPresetTabs.vue';
+import NetworkPulseFlow from './components/NetworkPulseFlow.vue';
+import './style.css';
+
+export default {
+  ...DefaultTheme,
+  enhanceApp(ctx) {
+    const { app } = ctx;
+    app.component('CounterButton', CounterButton);
+    app.component('TerminalInstall', TerminalInstall);
+    app.component('TerminalCommand', TerminalCommand);
+    app.component('TerminalSequence', TerminalSequence);
+    app.component('EnvPresetTabs', EnvPresetTabs);
+    app.component('NetworkPulseFlow', NetworkPulseFlow);
+    if (DefaultTheme.enhanceApp) {
+      DefaultTheme.enhanceApp(ctx);
+    }
+  },
+};

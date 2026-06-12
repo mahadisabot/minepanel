@@ -1,0 +1,120 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - '${BACKEND_PORT:-8091}:8091'
+    environment:
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-2d}
+      - ALLOW_INSECURE_AUTH_COOKIES=${ALLOW_INSECURE_AUTH_COOKIES:-false}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - PASSWORD_RESET_TOKEN_EXPIRES_IN_MINUTES=${PASSWORD_RESET_TOKEN_EXPIRES_IN_MINUTES:-60}
+      - BASE_DIR=${BASE_DIR:-$PWD}
+      - COMPOSE_PROJECT=${COMPOSE_PROJECT:-}
+      - BASE_PATH=${BASE_PATH:-}
+    volumes:
+      - ${BASE_DIR:-$PWD}/servers:/app/servers
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${BASE_DIR:-$PWD}/data:/app/data
+    networks:
+      - minepanel-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    working_dir: /app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # Subdirectory routing (build-time): uncomment and set path
+      # args:
+      #   - NEXT_PUBLIC_BASE_PATH=/minepanel
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-/api}
+      - NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH:-}
+      - NEXT_PUBLIC_DEFAULT_LANGUAGE=${NEXT_PUBLIC_DEFAULT_LANGUAGE:-en}
+    ports:
+      - '${FRONTEND_PORT:-3000}:3000'
+    networks:
+      - minepanel-network
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:alpine
+    container_name: minepanel-gateway
+    ports:
+      - '${GATEWAY_PORT:-8080}:80'
+    volumes:
+      - ${BASE_DIR:-$PWD}/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - minepanel-network
+    restart: unless-stopped
+
+  panel-playit:
+    image: ghcr.io/playit-cloud/playit-agent:latest
+    container_name: minepanel-playit
+    network_mode: service:gateway
+    volumes:
+      - ${BASE_DIR:-$PWD}/data/playit-panel:/etc/playit
+    entrypoint: ["sh", "-c", "if [ -f /etc/playit/playit.toml ]; then exec playitd --secret-path /etc/playit/playit.toml --platform-docker; elif [ ! -z \"$$SECRET_KEY\" ]; then exec /playit/entrypoint.sh; else echo 'No secret key configured. Waiting...'; while true; do sleep 3600; done; fi"]
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: minepanel-ngrok
+    restart: unless-stopped
+    command:
+      - "http"
+      - "gateway:80"
+      - "--config"
+      - "/etc/ngrok/ngrok.yml"
+    volumes:
+      - ${BASE_DIR:-$PWD}/data/ngrok:/etc/ngrok:ro
+    depends_on:
+      - gateway
+    networks:
+      - minepanel-network
+
+  upnp-helper:
+    build:
+      context: ./upnp-helper
+      dockerfile: Dockerfile
+    container_name: minepanel-upnp-helper
+    network_mode: host
+    restart: unless-stopped
+
+
+
+  # MC Proxy Router - Routes Minecraft Java Edition traffic by hostname (optional)
+  # Note: Only works with Java Edition (TCP). Bedrock uses UDP and doesn't support proxy routing.
+  # Enable with: docker compose -f docker-compose.development.yml --profile proxy up -d --build
+  # Requires DNS wildcard: *.mc.yourdomain.com -> server IP
+  mc-router:
+    image: itzg/mc-router:1.39.1
+    container_name: mc-router
+    profiles:
+      - proxy
+    ports:
+      - '${MC_PROXY_PORT:-25565}:25565'
+    environment:
+      - ROUTES_CONFIG=/data/routes.json
+      - ROUTES_CONFIG_WATCH=true
+    volumes:
+      - ${BASE_DIR:-$PWD}/data/proxy:/data
+    networks:
+      - minepanel-network
+    restart: unless-stopped
+
+networks:
+  minepanel-network:
+    name: minepanel-network
+    driver: bridge
